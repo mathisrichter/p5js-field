@@ -6,6 +6,8 @@ var resting_level = -50.0;
 var noise_strength = 0.2;
 var current_input = [];
 var previous_input_sum = [];
+var current_input_parameters;
+var previous_input_parameters;
 var kernel;
 var selective_kernel;
 var multi_peak_kernel;
@@ -171,20 +173,22 @@ function setup()
   reinitializeActivation();
 
   current_input = new Array(sampling_points);
+  current_input_parameters = new GaussianParameterSet(0.0, 0.0, 0.0);
   previous_input_sum = new Array(sampling_points);
+  previous_input_parameters = new GaussianParameterSetManager();
   reinitializeInput();
 
   // selective kernel
-  selective_kernel = gaussian(40.0, 7, 3.0, 15);
+  selective_kernel = gaussianArray(40.0, 7, 3.0, 15);
 
   // multi peak kernel
-  var multi_peak_exc = gaussian(20.0, 7, 6.0, 15);
-  var multi_peak_inh = gaussian(-10.0, 7, 60.0, 15);
+  var multi_peak_exc = gaussianArray(20.0, 7, 6.0, 15);
+  var multi_peak_inh = gaussianArray(-10.0, 7, 60.0, 15);
   multi_peak_kernel = multi_peak_exc.SumArray(multi_peak_inh);
 
   // working memory kernel
-  var working_memory_exc = gaussian(60.0, 7, 6.0, 15);
-  var working_memory_inh = gaussian(-20.0, 7, 60.0, 15);
+  var working_memory_exc = gaussianArray(60.0, 7, 6.0, 15);
+  var working_memory_inh = gaussianArray(-20.0, 7, 60.0, 15);
   working_memory_kernel = working_memory_exc.SumArray(working_memory_inh);
 
   button_selective = new KernelSelectorButton("selective field", 30, 30);
@@ -313,13 +317,7 @@ function draw()
 
 function mouseMoved()
 {
-  var mousePosition = [constrain(mouseX, 0, width), constrain(mouseY, 0, height)];
-  var amplitude = 0.0;
-  if (mousePosition[0] > 0 && mousePosition[0] < width && mousePosition[1] < display_threshold_y && mousePosition[1] > 0)
-  {
-    amplitude = -1.0 * (mousePosition[1] - display_threshold_y);
-  }
-  current_input = gaussian(amplitude, mousePosition[0]/distance_per_sample, 8.0, sampling_points);
+  updateCurrentInput();
 
   // if mouse is over one of the buttons, mark it for hovering
   if (button_selective.isMouseOver())
@@ -375,12 +373,13 @@ function mouseMoved()
   }
 }
 
-
 function mouseClicked()
 {
   if (mouseY < display_threshold_y)
   {
     previous_input_sum = previous_input_sum.SumArray(current_input);
+    previous_input_parameters.addParameterSetObj(current_input_parameters);
+    updateCurrentInput();
   }
 
   if (button_selective.isMouseOver())
@@ -468,6 +467,25 @@ function changeKernel(kernel_state)
   }
 }
 
+function updateCurrentInput()
+{
+  var mousePosition = [constrain(mouseX, 0, width), constrain(mouseY, 0, height)];
+  var amplitude = 0.0;
+  if (mousePosition[0] > 0 && mousePosition[0] < width && mousePosition[1] < display_threshold_y && mousePosition[1] > 0)
+  {
+    var previous_input_sum = previous_input_parameters.computeSum(mousePosition[0]/distance_per_sample);
+    amplitude = -1.0 * (mousePosition[1] - display_threshold_y) - previous_input_sum;
+
+    if (amplitude < 0)
+    {
+      amplitude = 0;
+    }
+  }
+  mu = mousePosition[0]/distance_per_sample;
+  sigma = 8.0;
+  current_input = gaussianArray(amplitude, mu, sigma, sampling_points);
+  current_input_parameters.setParameters(amplitude, mu, sigma);
+}
 
 function euler()
 {
@@ -501,17 +519,88 @@ function euler()
   }
 }
 
-
-function gaussian(amplitude, mu, sigma, size)
+class GaussianParameterSet
 {
-  var gaussian = new Array(size);
-
-  for (var i = 0; i < gaussian.length; i++)
+  constructor(amplitude, mu, sigma)
   {
-    gaussian[i] = amplitude * Math.exp(-(Math.pow(i - mu, 2)) / (2 * sigma));
+    this.amplitude = amplitude;
+    this.mu = mu;
+    this.sigma = sigma;
   }
 
-  return gaussian;
+  setParameters(amplitude, mu, sigma)
+  {
+    this.amplitude = amplitude;
+    this.mu = mu;
+    this.sigma = sigma;
+  }
+
+  clear()
+  {
+    this.amplitude = 0;
+    this.mu = 0;
+    this.sigma = 0;
+  }
+}
+
+class GaussianParameterSetManager
+{
+  constructor()
+  {
+    this.parameter_sets = [];
+  }
+
+  length()
+  {
+    return this.parameter_sets.length;
+  }
+
+  addParameterSet(amplitude, mu, sigma)
+  {
+    var set = new GaussianParameterSet(amplitude, mu, sigma);
+    this.parameter_sets.push(set);
+  }
+
+  addParameterSetObj(set)
+  {
+    var set_copy = new GaussianParameterSet(set.amplitude, set.mu, set.sigma);
+    this.parameter_sets.push(set_copy);
+  }
+
+  computeSum(position)
+  {
+    var sum = 0.0;
+
+    for (var i = 0; i < this.parameter_sets.length; i++)
+    {
+      var item = this.parameter_sets[i];
+      sum += gaussian(item.amplitude, item.mu, item.sigma, position);
+    }
+
+    return sum;
+  }
+
+  clear()
+  {
+    this.parameter_sets = [];
+  }
+}
+
+function gaussianArray(amplitude, mu, sigma, size)
+{
+  var gaussian_values = new Array(size);
+
+  for (var i = 0; i < gaussian_values.length; i++)
+  {
+    gaussian_values[i] = gaussian(amplitude, mu, sigma, i);
+  }
+
+  return gaussian_values;
+}
+
+function gaussian(amplitude, mu, sigma, position)
+{
+  return amplitude * Math.exp(-(Math.pow(position - mu, 2)) / (2 * sigma)); 
 }
 
 function sigmoid(x)
@@ -531,6 +620,9 @@ function reinitializeInput()
     current_input[i] = 0;
     previous_input_sum[i] = 0;
   }
+
+  current_input_parameters.clear();
+  previous_input_parameters.clear();
 }
 
 function reinitializeActivation()
