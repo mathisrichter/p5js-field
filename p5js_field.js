@@ -277,6 +277,22 @@ function draw()
   }
   pop();
 
+  // draw resting level marker ---------------------------
+  push();
+  stroke(blue_color);
+  translate(0, display_threshold_y - resting_level);
+  strokeWeight(2.0 * stroke_weight);
+  line(0, 0, width/50., 0);
+
+  if (show_help)
+  {
+    noStroke();
+    fill(blue_color);
+    text("resting level", 40, 40);
+  }
+
+  pop();
+
   // draw manual -----------------------------------------
   if (show_help)
   {
