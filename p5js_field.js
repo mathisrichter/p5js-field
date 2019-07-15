@@ -10,9 +10,14 @@ var current_input_parameters;
 var previous_input_parameters;
 var kernel;
 var selective_kernel;
+var selective_kernel_visualization;
 var multi_peak_kernel;
+var multi_peak_kernel_visualization;
 var working_memory_kernel;
-var global_inhibition_strength = -10.5;
+var working_memory_kernel_visualization;
+var global_inhibition_strength = 0.0;
+var selective_global_inhibition = -20.5;
+var working_memory_global_inhibition = -2.0;
 
 var KernelStateEnum = Object.freeze({"selective":1, "multi_peak":2, "working_memory":3});
 var show_help;
@@ -24,6 +29,7 @@ var yellow_color = "#b58900";
 var orange_color = "#cb4b16";
 var red_color = "#dc322f";
 var blue_color = "#268bd2";
+var cyan_color = "#2aa198";
 
 var stroke_weight = 5;
 var distance_per_sample;
@@ -178,18 +184,44 @@ function setup()
   previous_input_parameters = new GaussianParameterSetManager();
   reinitializeInput();
 
+  var kernel_size = 25;
+  var kernel_center = floor(kernel_size/2);
   // selective kernel
-  selective_kernel = gaussianArray(40.0, 7, 3.0, 15);
+  selective_kernel = gaussianArray(40.0, kernel_center, 3.0, kernel_size);
+  selective_kernel_visualization = new Array(sampling_points).fill(selective_global_inhibition);
+  {
+    var i = floor(sampling_points/2) - floor(selective_kernel.length/2);
+    for (var j = 0; j < selective_kernel.length; j++)
+    {
+      selective_kernel_visualization[i+j] += selective_kernel[j];
+    }
+  }
 
   // multi peak kernel
-  var multi_peak_exc = gaussianArray(20.0, 7, 6.0, 15);
-  var multi_peak_inh = gaussianArray(-10.0, 7, 60.0, 15);
+  var multi_peak_exc = gaussianArray(70.0, kernel_center, 6.0, kernel_size);
+  var multi_peak_inh = gaussianArray(-50.0, kernel_center, 12.0, kernel_size);
   multi_peak_kernel = multi_peak_exc.SumArray(multi_peak_inh);
+  multi_peak_kernel_visualization = new Array(sampling_points).fill(0);
+  {
+    var i = floor(sampling_points/2) - floor(multi_peak_kernel.length/2);
+    for (var j = 0; j < multi_peak_kernel.length; j++)
+    {
+      multi_peak_kernel_visualization[i+j] = multi_peak_kernel[j];
+    }
+  }
 
   // working memory kernel
-  var working_memory_exc = gaussianArray(60.0, 7, 6.0, 15);
-  var working_memory_inh = gaussianArray(-20.0, 7, 60.0, 15);
+  var working_memory_exc = gaussianArray(130.0, kernel_center, 6.0, kernel_size);
+  var working_memory_inh = gaussianArray(-90.0, kernel_center, 12.0, kernel_size);
   working_memory_kernel = working_memory_exc.SumArray(working_memory_inh);
+  working_memory_kernel_visualization = new Array(sampling_points).fill(working_memory_global_inhibition);
+  {
+    var i = floor(sampling_points/2) - floor(working_memory_kernel.length/2);
+    for (var j = 0; j < working_memory_kernel.length; j++)
+    {
+      working_memory_kernel_visualization[i+j] += working_memory_kernel[j];
+    }
+  }
 
   button_selective = new KernelSelectorButton("selective field", 30, 30);
   button_multi_peak = new KernelSelectorButton("multi-peak field", 30, 30);
@@ -277,9 +309,39 @@ function draw()
   }
   pop();
 
+  // draw kernel -----------------------------------------
+  if (button_selective.hovered || button_multi_peak.hovered || button_working_memory.hovered)
+  {
+    push();
+    translate(0, display_threshold_y);
+    stroke(blue_color);
+    beginShape();
+
+    var visualization_data;
+    if (button_selective.hovered)
+    {
+      visualization_data = selective_kernel_visualization;
+    }
+    else if (button_multi_peak.hovered)
+    {
+      visualization_data = multi_peak_kernel_visualization;
+    }
+    else
+    {
+      visualization_data = working_memory_kernel_visualization;
+    }
+
+    for (let i = 0; i < visualization_data.length; i++)
+    {
+      vertex(distance_per_sample * i, -1.0 * visualization_data[i]);
+    }
+    endShape();
+    pop();
+  }
+
   // draw resting level marker ---------------------------
   push();
-  stroke(blue_color);
+  stroke(cyan_color);
   translate(0, display_threshold_y - resting_level);
   strokeWeight(2.0 * stroke_weight);
   line(0, 0, width/50., 0);
@@ -287,7 +349,7 @@ function draw()
   if (show_help)
   {
     noStroke();
-    fill(blue_color);
+    fill(cyan_color);
     text("resting level", 40, 40);
   }
 
@@ -320,7 +382,14 @@ function draw()
   button_selective.draw();
 
   push();
-  fill(base01_color);
+  if (button_selective.hovered || button_multi_peak.hovered || button_working_memory.hovered)
+  {
+    fill(blue_color);
+  }
+  else
+  {
+    fill(base01_color);
+  }
   textAlign(RIGHT, BOTTOM);
   text(kernel_name_display, button_selective.x - margin, height - margin + 4);
   pop();
@@ -429,7 +498,7 @@ function mouseWheel(event)
     resting_level += event.delta
 
     var padding = 10;
-    var threshold_padding = 0.05;
+    var threshold_padding = -50;
  
     if (resting_level > -threshold_padding)
     {
@@ -468,7 +537,7 @@ function changeKernel(kernel_state)
   if (kernel_state == KernelStateEnum.selective)
   {
     kernel = selective_kernel;
-    global_inhibition_strength = -20.5;
+    global_inhibition_strength = selective_global_inhibition;
 
   }
   else if (kernel_state == KernelStateEnum.multi_peak)
@@ -479,7 +548,7 @@ function changeKernel(kernel_state)
   else if (kernel_state == KernelStateEnum.working_memory)
   {
     kernel = working_memory_kernel;
-    global_inhibition_strength = -2.0;
+    global_inhibition_strength = working_memory_global_inhibition;
   }
 }
 
@@ -631,20 +700,13 @@ function getRandom(min, max)
 
 function reinitializeInput()
 {
-  for (var i = 0; i < sampling_points; i++)
-  {
-    current_input[i] = 0;
-    previous_input_sum[i] = 0;
-  }
-
+  current_input.fill(0);
   current_input_parameters.clear();
+  previous_input_sum.fill(0);
   previous_input_parameters.clear();
 }
 
 function reinitializeActivation()
 {
-  for (var i = 0; i < sampling_points; i++)
-  {
-    u[i] = resting_level;
-  }
+  u.fill(resting_level);
 }
