@@ -498,15 +498,14 @@ function mouseWheel(event)
     resting_level += event.delta
 
     var padding = 10;
-    var threshold_padding = -50;
  
-    if (resting_level > -threshold_padding)
+    if (resting_level > height/2. - padding)
     {
-      resting_level = -threshold_padding
+      resting_level = height/2. - padding;
     }
-    else if (resting_level < -1 * (height / 2.) + padding)
+    else if (resting_level < -height/2. + padding)
     {
-      resting_level = -1 * (height / 2.) + padding;
+      resting_level = -height/2. + padding;
     }
     
     return false;
