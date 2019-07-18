@@ -1,5 +1,6 @@
 var sampling_points = 120;
 var u;
+var sigmoided_u;
 var time_step = 25;
 var tau = 500.0;
 var resting_level = -50.0;
@@ -23,6 +24,7 @@ var KernelStateEnum = Object.freeze({"selective":1, "multi_peak":2, "working_mem
 var show_help;
 
 var base01_color = "#586e75";
+var base03_color = "#002b36";
 var base00_color = "#657b83";
 var base0_color = "#839496";
 var yellow_color = "#b58900";
@@ -30,6 +32,7 @@ var orange_color = "#cb4b16";
 var red_color = "#dc322f";
 var blue_color = "#268bd2";
 var cyan_color = "#2aa198";
+var violet_color = "#6c71c4";
 
 var stroke_weight = 5;
 var distance_per_sample;
@@ -176,6 +179,7 @@ Array.prototype.SumArray = function (arr)
 function setup()
 {
   u = new Array(sampling_points);
+  sigmoided_u = new Array(sampling_points);
   reinitializeActivation();
 
   current_input = new Array(sampling_points);
@@ -255,7 +259,7 @@ function resize()
 
 function draw()
 {
-  background("#002b36");
+  background(base03_color);
   textFont("Helvetica", 35);
 
   euler();
@@ -268,6 +272,26 @@ function draw()
   stroke(base01_color);
   translate(0, display_threshold_y);
   line(0, 0, width, 0);
+  pop();
+
+  // draw sigmoided activation (output)-------------------
+  push();
+  stroke(violet_color);
+  translate(0, display_threshold_y);
+  beginShape();
+  for (let i = 0; i < sigmoided_u.length; i++)
+  {
+    vertex(distance_per_sample * i, -30.0 * (sigmoided_u[i]));
+  }
+  endShape();
+
+  if (show_help)
+  {
+    noStroke();
+    fill(violet_color);
+    text("output", width - 125, -20);
+  }
+
   pop();
 
   // draw input ------------------------------------------
@@ -285,7 +309,7 @@ function draw()
   {
     noStroke();
     fill(yellow_color);
-    text("input", width - 100, -20);
+    text("input", 40, -20);
   }
 
   pop();
@@ -576,7 +600,7 @@ function euler()
   var global_inhibition = 0;
   for (var i = 0; i < u.length; i++)
   {
-    global_inhibition += sigmoid(u[i]);
+    global_inhibition += sigmoided_u[i];
   }
 
   for (var i = 0; i < u.length; i++)
@@ -592,7 +616,7 @@ function euler()
       }
       else
       {
-        interaction_contribution = kernel[k] * sigmoid(u[neighbor_index]);
+        interaction_contribution = kernel[k] * sigmoided_u[neighbor_index];
       }
 
       interaction += interaction_contribution;
@@ -600,6 +624,7 @@ function euler()
 
     var du = -u[i] + resting_level + current_input[i] + previous_input_sum[i] + interaction + global_inhibition_strength * global_inhibition;
     u[i] = u[i] + (time_step / tau) * du + Math.sqrt(time_step) * noise_strength * getRandom(-1, 1);
+    sigmoided_u[i] = sigmoid(u[i]);
   }
 }
 
@@ -708,4 +733,5 @@ function reinitializeInput()
 function reinitializeActivation()
 {
   u.fill(resting_level);
+  sigmoided_u.fill(0);
 }
